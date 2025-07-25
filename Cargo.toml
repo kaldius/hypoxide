@@ -4,15 +4,24 @@ version = "0.1.0"
 edition = "2024"
 
 [package.metadata.bootimage]
-test-args = ["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"]
+# bootimage will append this to the QEMU launch command for test executables
+test-args = [
+  # isa-debug-exit: special QEMU device which provides an easy way to exit from the guest system (uses port-mapped I/O)
+  # iobase: port address the device should live on
+  # iosize: port size (size of data to write to the port at one time) in bytes
+  "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"
+]
 test-success-exit-code = 33 # (0x10 << 1) | 1
 
 [dependencies]
-bootloader = "0.9"
+bootloader = "0.9" # for now, we simply import a bootloader crate instead of creating it ourselves
+# The compiler might optimise away memory writes if it is never read. This crate marks memory
+# as [volatile](https://en.wikipedia.org/wiki/Volatile_%28computer_programming%29) to prevent this.
 volatile = "0.2.6"
-spin = "0.5.2"
-x86_64 = "0.14.2"
+spin = "0.5.2" # spinlock because mutexes are not available
+x86_64 = "0.14.2" # an abstraction over a set of assembly instructions
 
+# allows static variables lazily initialised at runtime
 [dependencies.lazy_static]
 version = "1.0"
-features = ["spin_no_std"]
+features = ["spin_no_std"] # because we don't link std library

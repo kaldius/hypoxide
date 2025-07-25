@@ -120,6 +120,10 @@ impl fmt::Write for Writer {
 use lazy_static::lazy_static;
 use spin::Mutex;
 
+// We want static to create a global instance, but Rust does not support converison of raw pointers
+// to references at compile time. The lazy_static crate allows static variables lazily initialised
+// at runtime.
+// TODO: consider [OnceCell](https://github.com/matklad/once_cell)
 lazy_static! {
     pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
         column_position: 0,
@@ -130,6 +134,8 @@ lazy_static! {
     });
 }
 
+// #[macro_export] makes the macro available anywhere in the crate so we use `crate::print` instead of
+// `crate::vgabuffer::print`
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::vga_buffer::_print(format_args!($($arg)*)));
@@ -141,6 +147,8 @@ macro_rules! println {
     ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
 }
 
+// Above macros need to call _print from outside the module, so it has to be public
+// But #[doc(hidden)] hides the function from generated docs
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;

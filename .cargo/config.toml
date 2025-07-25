@@ -1,9 +1,16 @@
 [build]
-target = "x86_64-hypoxide.json"
+target = "x86_64-hypoxide.json" # use this target file each time
 
 [unstable]
-build-std-features = ["compiler-builtins-mem"]
-build-std = ["core", "compiler_builtins"]
+build-std = [ # recompile these library crates
+  # The core library is typically distributed with the compiler, and is only valid for supported host triples, so we recompile for our target triple
+  "core",
+  "compiler_builtins" # a dependency of core
+]
+build-std-features = [
+  # The compiler_builtins crate contains some memory-related functions (e.g. `memset`, `memcpy`) which are disabled by default so as to not collide with the C library. Since the C library doesn't exist in our OS, we use this flag to enable them.
+  "compiler-builtins-mem"
+]
 
-[target.'cfg(target_os = "none")']
-runner = "bootimage runner"
+[target.'cfg(target_os = "none")'] # applies for all targets where "os" is set to "none"
+runner = "bootimage runner" # run this command after `cargo run`, the built binary will be passed in
