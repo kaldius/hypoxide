@@ -14,12 +14,25 @@
 
 use core::panic::PanicInfo;
 
+mod qemu;
+mod serial;
+mod testable;
 mod vga_buffer;
 
 // This function is called on panic
+#[cfg(not(test))] // only compiled when not `cargo test`
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("{}", info);
+    loop {}
+}
+
+#[cfg(test)] // only compiled when using `cargo test`
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    serial_println!("[failed]\n"); // we want to use serial_println when testing
+    serial_println!("Error: {}\n", info);
+    qemu::exit_qemu(qemu::QemuExitCode::Failed);
     loop {}
 }
 
@@ -30,7 +43,7 @@ fn panic(info: &PanicInfo) -> ! {
 pub extern "C" fn _start() -> ! {
     println!("Hello world{}", "!");
 
-    // test_main is only called when we call `cargo test`
+    // test_main is only compiled when we call `cargo test`
     #[cfg(test)]
     test_main();
 
@@ -38,36 +51,15 @@ pub extern "C" fn _start() -> ! {
 }
 
 #[cfg(test)]
-pub fn test_runner(tests: &[&dyn Fn()]) {
-    println!("Running {} tests", tests.len());
+pub fn test_runner(tests: &[&dyn testable::Testable]) {
+    serial_println!("Running {} tests", tests.len());
     for test in tests {
-        test();
+        test.run();
     }
-    exit_qemu(QemuExitCode::Success);
+    qemu::exit_qemu(qemu::QemuExitCode::Success);
 }
 
 #[test_case]
 fn trivial_assertion() {
-    print!("trivial assertion... ");
     assert_eq!(1, 1);
-    println!("[ok]");
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u32)] // port size is 4 bytes (see cargo.toml iosize)
-pub enum QemuExitCode {
-    Success = 0x10,
-    Failed = 0x11,
-}
-
-pub fn exit_qemu(exit_code: QemuExitCode) {
-    // Helps with reading/writing from/to port-mapped I/O
-    use x86_64::instructions::port::Port;
-
-    unsafe {
-        // qemu isa-debug-exit lives at this port address (see cargo.toml iobase)
-        let mut port = Port::new(0xf4);
-        // qemu_exit_code will be (exit_code << 1) | 1
-        port.write(exit_code as u32);
-    }
 }
