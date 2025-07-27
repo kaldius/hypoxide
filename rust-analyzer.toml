@@ -1,0 +1,6 @@
+[diagnostics]
+disabled = ["macro-error"]
+experimental.enable = false
+
+[macro]
+enable = true 
