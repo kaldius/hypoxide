@@ -1,8 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(custom_test_frameworks)]
-#![test_runner(test_runner)]
-#![reexport_test_harness_main = "test_main"]
 
 use core::panic::PanicInfo;
 use hypoxide::{QemuExitCode, exit_qemu, serial_print, serial_println};
@@ -16,23 +13,12 @@ fn panic(_info: &PanicInfo) -> ! {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    test_main();
+    should_fail();
+    serial_println!("[test did not panic]");
+    exit_qemu(QemuExitCode::Failed);
     loop {}
 }
 
-pub fn test_runner(tests: &[&dyn Fn()]) {
-    serial_println!("Running {} tests", tests.len());
-    // drawback is we can only run 1 test case that will panic, since it will panic and not go to
-    // the next test in the array
-    for test in tests {
-        test();
-        serial_println!("[test did not panic]");
-        exit_qemu(QemuExitCode::Failed);
-    }
-    exit_qemu(QemuExitCode::Success);
-}
-
-#[test_case]
 fn should_fail() {
     serial_print!("should_panic::should_fail...\t");
     assert_eq!(1, 2);
