@@ -22,6 +22,11 @@ use hypoxide::println;
 pub extern "C" fn _start() -> ! {
     println!("Hello world{}", "!");
 
+    // init IDT
+    hypoxide::init();
+    // invoke breakpoint exception
+    x86_64::instructions::interrupts::int3();
+
     // test_main is only compiled when we call `cargo test`
     #[cfg(test)]
     test_main();
