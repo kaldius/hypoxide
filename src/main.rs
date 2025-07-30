@@ -24,8 +24,10 @@ pub extern "C" fn _start() -> ! {
 
     // init IDT
     hypoxide::init();
-    // invoke breakpoint exception
-    x86_64::instructions::interrupts::int3();
+
+    unsafe {
+        *(0xdeadbeef as *mut u8) = 42;
+    }
 
     // test_main is only compiled when we call `cargo test`
     #[cfg(test)]

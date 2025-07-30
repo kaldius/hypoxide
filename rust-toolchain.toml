@@ -1,5 +1,6 @@
 [toolchain]
-channel = "nightly" # this OS requries experimental features only available in nightly
+# currently pinned to this nightly version because of issues in the latest nightly
+channel = "nightly-2025-06-01" # this OS requries experimental features only available in nightly
 components = [
   "llvm-tools-preview", # bootimage crate depends on this
   "rust-src" # std lib source code. depended on by `.cargo/config.toml` "build-std" feature
