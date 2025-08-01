@@ -6,7 +6,7 @@
 // `test` depends on std lib, so instead we use this feature requires no external libraries and
 // runs all functions annotated with #[test_case]
 #![feature(custom_test_frameworks)]
-#![test_runner(hypoxide::test_runner)]
+#![test_runner(hypoxide::test_utils::test_runner)]
 // specify our test runner function
 // custom_test_frameworks generates a `main` function which calls our test_runner
 // this line changes the name of that `main` function to `test_main`
@@ -41,5 +41,5 @@ fn panic(info: &PanicInfo) -> ! {
 #[cfg(test)]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    hypoxide::test_panic_handler(info)
+    hypoxide::test_utils::test_panic_handler(info)
 }

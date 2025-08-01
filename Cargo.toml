@@ -31,6 +31,9 @@ uart_16550 = "0.2.0" # used to send data through a serial port to qemu
 version = "1.0"
 features = ["spin_no_std"] # because we don't link std library
 
+[lib]
+path = "src/lib/mod.rs"
+
 [[test]]
 name = "should_panic"
 harness = false

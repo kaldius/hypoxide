@@ -2,7 +2,10 @@
 #![no_main]
 
 use core::panic::PanicInfo;
-use hypoxide::{QemuExitCode, exit_qemu, serial_print, serial_println};
+use hypoxide::{
+    qemu::{QemuExitCode, exit_qemu},
+    serial_print, serial_println,
+};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {

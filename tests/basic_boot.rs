@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(custom_test_frameworks)]
-#![test_runner(hypoxide::test_runner)]
+#![test_runner(hypoxide::test_utils::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
 use core::panic::PanicInfo;
@@ -15,7 +15,7 @@ pub extern "C" fn _start() -> ! {
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    hypoxide::test_panic_handler(info)
+    hypoxide::test_utils::test_panic_handler(info)
 }
 
 #[test_case]

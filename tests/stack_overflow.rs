@@ -3,7 +3,10 @@
 #![feature(abi_x86_interrupt)]
 
 use core::panic::PanicInfo;
-use hypoxide::{QemuExitCode, exit_qemu, serial_print, serial_println};
+use hypoxide::{
+    qemu::{QemuExitCode, exit_qemu},
+    serial_print, serial_println,
+};
 use lazy_static::lazy_static;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 
@@ -52,5 +55,5 @@ extern "x86-interrupt" fn test_double_fault_handler(
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    hypoxide::test_panic_handler(info)
+    hypoxide::test_utils::test_panic_handler(info)
 }
