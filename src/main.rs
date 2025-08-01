@@ -22,14 +22,7 @@ use hypoxide::println;
 pub extern "C" fn _start() -> ! {
     println!("Hello world{}", "!");
 
-    // init IDT
     hypoxide::init();
-
-    fn stack_overflow() {
-        stack_overflow();
-    }
-
-    stack_overflow();
 
     // test_main is only compiled when we call `cargo test`
     #[cfg(test)]

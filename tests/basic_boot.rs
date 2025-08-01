@@ -5,7 +5,6 @@
 #![reexport_test_harness_main = "test_main"]
 
 use core::panic::PanicInfo;
-
 use hypoxide::println;
 
 #[unsafe(no_mangle)]

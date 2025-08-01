@@ -13,6 +13,7 @@ pub mod vga_buffer;
 use core::panic::PanicInfo;
 
 pub fn init() {
+    // needs to happen before init_idt because double fault handler depends on the IST entry set up here
     gdt::init();
     interrupts::init_idt();
 }

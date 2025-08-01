@@ -6,17 +6,22 @@ use x86_64::structures::{
     tss::TaskStateSegment,
 };
 
+// The Interrupt Stack Table (IST) is a table of "backup stacks" we can use to avoid kernel stack
+// overflow errors.
+// There are 7 slots in the IST, we just select one here.
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
 
+// The Task State Segment (TSS) was previously used for task state management, but no longer in 64 bit systems.
+// It is now used to hold some stack tables and an I/O permissions bitmap.
 lazy_static! {
     static ref TSS: TaskStateSegment = {
         let mut tss = TaskStateSegment::new();
         tss.interrupt_stack_table[DOUBLE_FAULT_IST_INDEX as usize] = {
             const STACK_SIZE: usize = 4096 * 5;
             static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
-            let stack_start = VirtAddr::from_ptr(&raw const STACK);
-            let stack_end = stack_start + STACK_SIZE;
-            stack_end
+            let stack_start = VirtAddr::from_ptr(&raw const STACK); // low address
+            let stack_end = stack_start + STACK_SIZE; // high address
+            stack_end // we insert the high address into the table because stacks grow downwards
         };
         tss
     };
