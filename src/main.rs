@@ -29,14 +29,14 @@ pub extern "C" fn _start() -> ! {
     test_main();
 
     println!("It did not crash");
-    loop {}
+    hypoxide::hlt_loop();
 }
 
 #[cfg(not(test))] // only compiled when not `cargo test`
 #[panic_handler] // This function is called on panic
 fn panic(info: &PanicInfo) -> ! {
     println!("{}", info);
-    loop {}
+    hypoxide::hlt_loop();
 }
 
 #[cfg(test)]
