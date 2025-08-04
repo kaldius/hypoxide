@@ -25,6 +25,7 @@ volatile = "0.2.6"
 spin = "0.5.2" # spinlock because mutexes are not available
 x86_64 = "0.14.2" # an abstraction over a set of assembly instructions
 uart_16550 = "0.2.0" # used to send data through a serial port to qemu
+pic8259 = "0.10.1" # used to configure the Intel 8259 Programmable Interrupt Controller (PIC)
 
 # allows static variables lazily initialised at runtime
 [dependencies.lazy_static]

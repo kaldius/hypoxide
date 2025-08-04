@@ -19,6 +19,8 @@ pub fn init() {
     // needs to happen before init_idt because double fault handler depends on the IST entry set up here
     gdt::init();
     interrupts::init_idt();
+    interrupts::init_pics();
+    x86_64::instructions::interrupts::enable();
 }
 
 #[cfg(test)]
