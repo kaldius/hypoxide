@@ -24,6 +24,11 @@ pub extern "C" fn _start() -> ! {
 
     hypoxide::init();
 
+    let a = 0xdeadbeef as *mut u8;
+    unsafe {
+        *a = 1;
+    }
+
     // test_main is only compiled when we call `cargo test`
     #[cfg(test)]
     test_main();
