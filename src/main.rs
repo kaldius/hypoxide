@@ -12,21 +12,28 @@
 // this line changes the name of that `main` function to `test_main`
 #![reexport_test_harness_main = "test_main"]
 
+use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
 use hypoxide::println;
 
-// Custom entrypoint
-// `pub extern "C"` specifies to use C ABI
-// We call it `_start` because it is the default entrypoint name for most systems.
-#[unsafe(no_mangle)] // prevents compiler from generating function with a cryptic unique name
-pub extern "C" fn _start() -> ! {
-    println!("Hello world{}", "!");
+// Creates the `_start` entrypoint function for us
+entry_point!(kernel_main);
 
+fn kernel_main(boot_info: &'static BootInfo) -> ! {
+    use hypoxide::memory::active_level_4_table;
+    use x86_64::VirtAddr;
+
+    println!("Hello world{}", "!");
     hypoxide::init();
 
-    let a = 0xdeadbeef as *mut u8;
-    unsafe {
-        *a = 1;
+    let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
+    let l4_table = unsafe { active_level_4_table(phys_mem_offset) };
+
+    for (i, entry) in l4_table.iter().enumerate() {
+        if !entry.is_unused() {
+            println!("L4 Entry {}: {:?}", i, entry);
+            // TODO: continue at "Translating Addresses"
+        }
     }
 
     // test_main is only compiled when we call `cargo test`

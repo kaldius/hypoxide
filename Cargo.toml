@@ -18,7 +18,10 @@ test-args = [
 test-success-exit-code = 33 # (0x10 << 1) | 1
 
 [dependencies]
-bootloader = "0.9" # for now, we simply import a bootloader crate instead of creating it ourselves
+# for now, we simply import a bootloader crate instead of creating it ourselves
+# the "map_physical_memory" feature maps the complete physical memory somewhere into the virtual address space
+# alternatively, we could use the "recursive_page_table" feature
+bootloader = { version = "0.9", features = ["map_physical_memory"] }
 # The compiler might optimise away memory writes if it is never read. This crate marks memory
 # as [volatile](https://en.wikipedia.org/wiki/Volatile_%28computer_programming%29) to prevent this.
 volatile = "0.2.6"

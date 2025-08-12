@@ -7,13 +7,32 @@
 
 pub mod gdt;
 pub mod interrupts;
+pub mod memory;
 pub mod qemu;
 pub mod serial;
 pub mod test_utils;
 pub mod vga_buffer;
 
 #[cfg(test)]
+use bootloader::{BootInfo, entry_point};
+#[cfg(test)]
 use core::panic::PanicInfo;
+
+#[cfg(test)]
+entry_point!(test_kernel_main);
+
+#[cfg(test)]
+fn test_kernel_main(_boot_info: &'static BootInfo) -> ! {
+    init();
+    test_main();
+    hlt_loop();
+}
+
+#[cfg(test)]
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    test_utils::test_panic_handler(info)
+}
 
 pub fn init() {
     // needs to happen before init_idt because double fault handler depends on the IST entry set up here
@@ -27,18 +46,4 @@ pub fn hlt_loop() -> ! {
     loop {
         x86_64::instructions::hlt();
     }
-}
-
-#[cfg(test)]
-#[unsafe(no_mangle)]
-pub extern "C" fn _start() -> ! {
-    init();
-    test_main();
-    hlt_loop();
-}
-
-#[cfg(test)]
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    test_utils::test_panic_handler(info)
 }
