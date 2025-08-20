@@ -12,10 +12,12 @@
 // this line changes the name of that `main` function to `test_main`
 #![reexport_test_harness_main = "test_main"]
 
+use alloc::{boxed::Box, rc::Rc, vec, vec::Vec};
 use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
-use hypoxide::println;
-use x86_64::structures::paging::Page;
+use hypoxide::{allocator, println};
+
+extern crate alloc;
 
 // Creates the `_start` entrypoint function for us
 entry_point!(kernel_main);
@@ -32,11 +34,28 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     let mut frame_allocator =
         unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
 
-    let page = Page::containing_address(VirtAddr::new(0xdeadbeef));
-    memory::create_example_mapping(page, &mut mapper, &mut frame_allocator);
+    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
 
-    let page_ptr: *mut u64 = page.start_address().as_mut_ptr();
-    unsafe { page_ptr.offset(400).write_volatile(0x_f021_f077_f065_f04e) };
+    let x = Box::new(41);
+    println!("x at {:p}", x);
+
+    let mut v = Vec::new();
+    for i in 0..500 {
+        v.push(i);
+    }
+    println!("vec at {:p}", v.as_slice());
+
+    let reference_counted = Rc::new(vec![1, 2, 3]);
+    let cloned_reference = reference_counted.clone();
+    println!(
+        "current reference count {}",
+        Rc::strong_count(&cloned_reference)
+    );
+    core::mem::drop(reference_counted);
+    println!(
+        "reference count is now {}",
+        Rc::strong_count(&cloned_reference)
+    );
 
     // test_main is only compiled when we call `cargo test`
     #[cfg(test)]

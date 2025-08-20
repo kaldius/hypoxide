@@ -5,7 +5,8 @@ target = "x86_64-hypoxide.json" # use this target file each time
 build-std = [ # recompile these library crates
   # The core library is typically distributed with the compiler, and is only valid for supported host triples, so we recompile for our target triple
   "core",
-  "compiler_builtins" # a dependency of core
+  "compiler_builtins", # a dependency of core
+  "alloc" # handles memory allocation
 ]
 build-std-features = [
   # The compiler_builtins crate contains some memory-related functions (e.g. `memset`, `memcpy`) which are disabled by default so as to not collide with the C library. Since the C library doesn't exist in our OS, we use this flag to enable them.

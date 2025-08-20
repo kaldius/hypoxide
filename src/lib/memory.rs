@@ -1,9 +1,7 @@
 use bootloader::bootinfo::{MemoryMap, MemoryRegionType};
 use x86_64::{
     PhysAddr, VirtAddr,
-    structures::paging::{
-        FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PhysFrame, Size4KiB,
-    },
+    structures::paging::{FrameAllocator, OffsetPageTable, PageTable, PhysFrame, Size4KiB},
 };
 
 /// Returns a mutable reference to the active level 4 table.
@@ -30,27 +28,8 @@ pub unsafe fn init(physical_memory_offset: VirtAddr) -> OffsetPageTable<'static>
     }
 }
 
-/// Creates an example mapping for the given page to frame `0xb8000`
-pub fn create_example_mapping(
-    page: Page,
-    mapper: &mut OffsetPageTable,
-    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) {
-    use x86_64::structures::paging::PageTableFlags as Flags;
-
-    let frame = PhysFrame::containing_address(PhysAddr::new(0xb8000));
-    let flags = Flags::WRITABLE | Flags::PRESENT;
-
-    let res = unsafe {
-        // FIXME: this is not safe, we do it only for testing
-        // we should not be having another page table that maps to the same
-        // frame as our vga_buffer mod
-        mapper.map_to(page, frame, flags, frame_allocator)
-    };
-    res.expect("failed to map").flush();
-}
-
-///
+/// Uses the memory map provided in the BootInfo from the bootloader to allocate free physical
+/// memory regions
 pub struct BootInfoFrameAllocator {
     memory_map: &'static MemoryMap,
     next: usize,

@@ -5,6 +5,7 @@
 #![reexport_test_harness_main = "test_main"]
 #![feature(abi_x86_interrupt)]
 
+pub mod allocator;
 pub mod gdt;
 pub mod interrupts;
 pub mod memory;
@@ -12,6 +13,8 @@ pub mod qemu;
 pub mod serial;
 pub mod test_utils;
 pub mod vga_buffer;
+
+extern crate alloc;
 
 #[cfg(test)]
 use bootloader::{BootInfo, entry_point};
