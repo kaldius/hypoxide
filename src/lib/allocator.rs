@@ -1,4 +1,5 @@
-use linked_list_allocator::LockedHeap;
+use bump::BumpAllocator;
+use spin::MutexGuard;
 use x86_64::{
     VirtAddr,
     structures::paging::{
@@ -6,11 +7,13 @@ use x86_64::{
     },
 };
 
+pub mod bump;
+
 pub const HEAP_START: usize = 0x_4444_4444_0000;
 pub const HEAP_SIZE: usize = 100 * 1024; // 100 KiB
 
 #[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
+static ALLOCATOR: Locked<BumpAllocator> = Locked::new(BumpAllocator::new());
 
 pub fn init_heap(
     mapper: &mut impl Mapper<Size4KiB>,
@@ -44,4 +47,37 @@ pub fn init_heap(
     }
 
     Ok(())
+}
+
+/// A generic wrapper around spin::Mutex to get around the orphan rules
+pub struct Locked<A> {
+    inner: spin::Mutex<A>,
+}
+
+impl<A> Locked<A> {
+    pub const fn new(inner: A) -> Self {
+        Locked {
+            inner: spin::Mutex::new(inner),
+        }
+    }
+
+    pub fn lock(&self) -> MutexGuard<A> {
+        self.inner.lock()
+    }
+}
+
+/// Align the given address upwards to alignment
+///
+/// Requires that `alignment` is a power of two, which is guaranteed by
+/// core::alloc::Layout::align()
+fn align_up(addr: usize, alignment: usize) -> usize {
+    // e.g.
+    // alignment = 8    = 0...01000
+    // alignment - 1    = 0...00111
+    // !(alignment - 1) = 1...11000
+    // addr & !(alignment - 1) will remove the last 3 bits, effectively aligning downwards
+    // since we want to align upwards, we add (alignment - 1) first
+    let ones_below = alignment - 1;
+    let align_down_mask = !(ones_below);
+    (addr + ones_below) & align_down_mask
 }
