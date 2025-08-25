@@ -9,9 +9,9 @@ pub struct ListNode {
 }
 
 impl ListNode {
-    pub const fn new() -> Self {
+    const fn new(size: usize) -> Self {
         ListNode {
-            size: 0,
+            size: size,
             next: None,
         }
     }
@@ -24,10 +24,17 @@ impl ListNode {
         self.start_addr() + self.size
     }
 
+    /// Given an allocation layout, determines the size to allocate such that:
+    /// 1. the request is met, and
+    /// 2. the allocated region will fit a ListNode when eventually freed.
     fn alloc_size(layout: Layout) -> usize {
         layout.size().max(mem::size_of::<Self>())
     }
 
+    /// Given an allocation layout, determines the alignment such that:
+    /// 1. the request is met, and
+    /// 2. the allocated region will be properly aligned when a replaced with a ListNode after it
+    ///    it is freed.
     fn alloc_align(layout: Layout) -> usize {
         layout
             .align_to(mem::align_of::<Self>())
@@ -36,6 +43,14 @@ impl ListNode {
             .align()
     }
 
+    /// Attempts to allocate a memory region in the ListNode.
+    /// Returns a UsableRegion with the allocated region.
+    /// If there is extra space in the ListNode, the returned UsableRegion will also contain an
+    /// excess_region.
+    ///
+    /// Returns Err if:
+    /// 1. the ListNode is too small for the requested size, or
+    /// 2. the leftover size is too small to fit a new ListNode.
     fn try_allocate(&self, size: usize, align: usize) -> Result<UsableRegion, ()> {
         // FIXME: if aligned up, leading gap will be lost, we ignore for now,
         // but try to think of a solution
@@ -87,13 +102,14 @@ struct MemRegion {
 }
 
 pub struct LinkedListAllocator {
+    // Dummy ListNode whose `next` points to the first node
     head: ListNode,
 }
 
 impl LinkedListAllocator {
     pub const fn new() -> Self {
         LinkedListAllocator {
-            head: ListNode::new(),
+            head: ListNode::new(0),
         }
     }
 
@@ -103,13 +119,22 @@ impl LinkedListAllocator {
         }
     }
 
+    /// Adds a ListNode to the front of the LL, representing addr and size.
+    ///
+    /// Unsafe because the caller must make sure addr is a valid address on the heap which can be
+    /// written over.
     pub unsafe fn add_free_region(&mut self, addr: usize, size: usize) {
-        // addr must be aligned to ListNode
-        assert_eq!(super::align_up(addr, mem::align_of::<ListNode>()), addr);
-        // size must be big enough to fit a ListNode
-        assert!(size >= mem::size_of::<ListNode>());
+        assert_eq!(
+            super::align_up(addr, mem::align_of::<ListNode>()),
+            addr,
+            "addr must be aligned to ListNode"
+        );
+        assert!(
+            size >= mem::size_of::<ListNode>(),
+            "size must be big enough to fit a ListNode"
+        );
 
-        let mut node = ListNode::new();
+        let mut node = ListNode::new(size);
         // put new node in front of the LL
         node.next = self.head.next.take();
 
@@ -123,6 +148,9 @@ impl LinkedListAllocator {
         }
     }
 
+    /// Looks for a free region with the given size and alignment and removes it from the list.
+    ///
+    /// Returns a UsableRegion which may contain an excess_region.
     fn extract_first_suitable_region(&mut self, size: usize, align: usize) -> Option<UsableRegion> {
         let mut curr = &mut self.head;
         while let Some(ref mut node) = curr.next {
@@ -150,11 +178,14 @@ unsafe impl GlobalAlloc for super::Locked<LinkedListAllocator> {
         else {
             return ptr::null_mut();
         };
+
+        // If there is an excess_region, add it back to the LL
         if let Some(MemRegion { start, size }) = excess_region {
             unsafe {
                 allocator.add_free_region(start, size);
             }
         }
+
         alloc_region.start as *mut u8
     }
 
@@ -261,6 +292,195 @@ mod list_node {
                 }),
             };
             assert_eq!(node.try_allocate(16, 8), Ok(expected));
+        }
+    }
+}
+
+#[cfg(test)]
+mod linked_list_allocator {
+    use super::super::align_up;
+    use super::*;
+
+    #[repr(align(16))]
+    struct AlignedBuffer([u8; 4096]);
+
+    impl AlignedBuffer {
+        fn new() -> Self {
+            AlignedBuffer([0; 4096])
+        }
+
+        fn start_addr(&mut self) -> usize {
+            self.0.as_mut_ptr() as usize
+        }
+    }
+
+    /// Creates a LinkedListAllocator with 5 blocks, whose starting addresses and sizes are as
+    /// specified in the arrays.
+    /// TODO: what check do we have to make sure size wont flow into next node???
+    fn new_ll_allocator_with_five_blocks(
+        addrs: [usize; 5],
+        sizes: [usize; 5],
+    ) -> LinkedListAllocator {
+        let mut ll_allocator = LinkedListAllocator::new();
+        for (&addr, size) in addrs.iter().zip(sizes) {
+            let aligned_addr = align_up(addr, mem::align_of::<ListNode>());
+            unsafe {
+                ll_allocator.add_free_region(aligned_addr, size);
+            }
+        }
+        ll_allocator
+    }
+
+    mod add_free_memory_region {
+        use super::super::super::align_up;
+        use super::*;
+
+        #[test_case]
+        fn add_first_free_region() {
+            let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+
+            let mut ll_allocator = LinkedListAllocator::new();
+            assert!(ll_allocator.head.next.is_none());
+
+            let aligned_addr = align_up(test_heap.start_addr(), mem::align_of::<ListNode>());
+
+            unsafe {
+                ll_allocator.add_free_region(aligned_addr, mem::size_of::<ListNode>());
+            }
+
+            let result_node = ll_allocator
+                .head
+                .next
+                .expect("allocator should contain newly inserted memory region");
+            assert_eq!(result_node.size, mem::size_of::<ListNode>());
+            assert_eq!(result_node.start_addr(), aligned_addr);
+            assert!(result_node.next.is_none());
+        }
+
+        #[test_case]
+        fn add_multiple_free_regions() {
+            let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+            let heap_start = test_heap.start_addr();
+            let addrs = [
+                heap_start,
+                heap_start + 64,
+                heap_start + 128,
+                heap_start + 192,
+                heap_start + 256,
+            ];
+            let sizes = [32; 5];
+            let mut ll_allocator = new_ll_allocator_with_five_blocks(addrs, sizes);
+
+            let mut curr = &mut ll_allocator.head;
+            for &addr in addrs.iter().rev() {
+                let node = curr.next.as_mut().unwrap();
+                assert_eq!(node.size, 32);
+                assert_eq!(node.start_addr(), addr);
+                curr = node;
+            }
+            assert!(curr.next.is_none());
+        }
+
+        // TODO: this is a panicking test, put it in its own test
+        // #[test_case]
+        // fn unaligned_addr_causes_panic() {
+        //     let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+        //
+        //     let mut ll_allocator = LinkedListAllocator::new();
+        //     let addr = test_heap.0.as_mut_ptr() as usize;
+        //     let unaligned_addr = addr + 1;
+        //     unsafe {
+        //         ll_allocator.add_free_region(unaligned_addr, mem::size_of::<ListNode>());
+        //     }
+        // }
+
+        // TODO: this is a panicking test, put it in its own test
+        // #[test_case]
+        // fn size_too_small_for_list_node_causes_panic() {
+        //     let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+        //
+        //     let mut ll_allocator = LinkedListAllocator::new();
+        //     let addr = test_heap.0.as_mut_ptr() as usize;
+        //     let aligned_addr = align_up(addr, mem::align_of::<ListNode>());
+        //
+        //     unsafe {
+        //         ll_allocator.add_free_region(aligned_addr, mem::size_of::<ListNode>() - 1);
+        //     }
+        // }
+    }
+
+    mod extract_first_suitable_region {
+        use super::*;
+
+        #[test_case]
+        fn empty_allocator() {
+            let mut ll_allocator = LinkedListAllocator::new();
+            assert!(ll_allocator.extract_first_suitable_region(32, 8).is_none());
+        }
+
+        #[test_case]
+        fn single_list_node_with_insufficient_space() {
+            let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+
+            let mut ll_allocator = LinkedListAllocator::new();
+            ll_allocator.init(test_heap.start_addr(), 4096);
+
+            assert!(
+                ll_allocator
+                    .extract_first_suitable_region(8192, 8)
+                    .is_none()
+            );
+        }
+
+        #[test_case]
+        fn multiple_list_nodes_with_insufficient_space() {
+            let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+            let heap_start = test_heap.start_addr();
+            let addrs = [
+                heap_start,
+                heap_start + 64,
+                heap_start + 128,
+                heap_start + 192,
+                heap_start + 256,
+            ];
+            let sizes = [32; 5];
+            let mut ll_allocator = new_ll_allocator_with_five_blocks(addrs, sizes);
+
+            assert!(
+                ll_allocator.extract_first_suitable_region(33, 8).is_none(),
+                "requesting 33 bytes when each block is 32 should return None"
+            );
+        }
+
+        #[test_case]
+        fn multiple_list_nodes_one_has_sufficient_space() {
+            let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+            let heap_start = test_heap.start_addr();
+            let addrs = [
+                heap_start,
+                heap_start + 64,
+                heap_start + 128,
+                heap_start + 192,
+                heap_start + 256,
+            ];
+            let sizes = [32, 32, 32, 64, 32];
+            let mut ll_allocator = new_ll_allocator_with_five_blocks(addrs, sizes);
+
+            let UsableRegion {
+                alloc_region,
+                excess_region,
+            } = ll_allocator
+                .extract_first_suitable_region(48, 8)
+                .expect("requesting 33 bytes when each block is 32 should return Some");
+
+            // check that indeed the 4th block was allocated
+            assert_eq!(alloc_region.start, addrs[3]);
+            assert_eq!(alloc_region.size, 48);
+
+            let excess =
+                excess_region.expect("requesting 48 bytes from 64 byte block should have excess");
+            assert_eq!(excess.start, addrs[3] + 48);
+            assert_eq!(excess.size, 16);
         }
     }
 }
