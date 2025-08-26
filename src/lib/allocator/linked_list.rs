@@ -298,46 +298,16 @@ mod list_node {
 
 #[cfg(test)]
 mod linked_list_allocator {
-    use super::super::align_up;
+    use super::test_utils;
     use super::*;
 
-    #[repr(align(16))]
-    struct AlignedBuffer([u8; 4096]);
-
-    impl AlignedBuffer {
-        fn new() -> Self {
-            AlignedBuffer([0; 4096])
-        }
-
-        fn start_addr(&mut self) -> usize {
-            self.0.as_mut_ptr() as usize
-        }
-    }
-
-    /// Creates a LinkedListAllocator with 5 blocks, whose starting addresses and sizes are as
-    /// specified in the arrays.
-    /// TODO: what check do we have to make sure size wont flow into next node???
-    fn new_ll_allocator_with_five_blocks(
-        addrs: [usize; 5],
-        sizes: [usize; 5],
-    ) -> LinkedListAllocator {
-        let mut ll_allocator = LinkedListAllocator::new();
-        for (&addr, size) in addrs.iter().zip(sizes) {
-            let aligned_addr = align_up(addr, mem::align_of::<ListNode>());
-            unsafe {
-                ll_allocator.add_free_region(aligned_addr, size);
-            }
-        }
-        ll_allocator
-    }
-
     mod add_free_memory_region {
-        use super::super::super::align_up;
         use super::*;
+        use crate::allocator::align_up;
 
         #[test_case]
         fn add_first_free_region() {
-            let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+            let mut test_heap = test_utils::AlignedBuffer::new();
 
             let mut ll_allocator = LinkedListAllocator::new();
             assert!(ll_allocator.head.next.is_none());
@@ -359,7 +329,7 @@ mod linked_list_allocator {
 
         #[test_case]
         fn add_multiple_free_regions() {
-            let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+            let mut test_heap = test_utils::AlignedBuffer::new();
             let heap_start = test_heap.start_addr();
             let addrs = [
                 heap_start,
@@ -369,7 +339,7 @@ mod linked_list_allocator {
                 heap_start + 256,
             ];
             let sizes = [32; 5];
-            let mut ll_allocator = new_ll_allocator_with_five_blocks(addrs, sizes);
+            let mut ll_allocator = test_utils::new_ll_allocator_with_five_blocks(addrs, sizes);
 
             let mut curr = &mut ll_allocator.head;
             for &addr in addrs.iter().rev() {
@@ -420,7 +390,7 @@ mod linked_list_allocator {
 
         #[test_case]
         fn single_list_node_with_insufficient_space() {
-            let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+            let mut test_heap = test_utils::AlignedBuffer::new();
 
             let mut ll_allocator = LinkedListAllocator::new();
             ll_allocator.init(test_heap.start_addr(), 4096);
@@ -434,7 +404,7 @@ mod linked_list_allocator {
 
         #[test_case]
         fn multiple_list_nodes_with_insufficient_space() {
-            let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+            let mut test_heap = test_utils::AlignedBuffer::new();
             let heap_start = test_heap.start_addr();
             let addrs = [
                 heap_start,
@@ -444,7 +414,7 @@ mod linked_list_allocator {
                 heap_start + 256,
             ];
             let sizes = [32; 5];
-            let mut ll_allocator = new_ll_allocator_with_five_blocks(addrs, sizes);
+            let mut ll_allocator = test_utils::new_ll_allocator_with_five_blocks(addrs, sizes);
 
             assert!(
                 ll_allocator.extract_first_suitable_region(33, 8).is_none(),
@@ -454,7 +424,7 @@ mod linked_list_allocator {
 
         #[test_case]
         fn multiple_list_nodes_one_has_sufficient_space() {
-            let mut test_heap: AlignedBuffer = AlignedBuffer::new();
+            let mut test_heap = test_utils::AlignedBuffer::new();
             let heap_start = test_heap.start_addr();
             let addrs = [
                 heap_start,
@@ -464,7 +434,7 @@ mod linked_list_allocator {
                 heap_start + 256,
             ];
             let sizes = [32, 32, 32, 64, 32];
-            let mut ll_allocator = new_ll_allocator_with_five_blocks(addrs, sizes);
+            let mut ll_allocator = test_utils::new_ll_allocator_with_five_blocks(addrs, sizes);
 
             let UsableRegion {
                 alloc_region,
@@ -482,5 +452,133 @@ mod linked_list_allocator {
             assert_eq!(excess.start, addrs[3] + 48);
             assert_eq!(excess.size, 16);
         }
+    }
+}
+
+#[cfg(test)]
+mod alloc_dealloc {
+    use super::*;
+    use crate::allocator::Locked;
+
+    #[test_case]
+    fn empty_allocator_alloc() {
+        let locked_allocator = Locked::new(LinkedListAllocator::new());
+
+        let layout = Layout::new::<usize>();
+        let ptr = unsafe { locked_allocator.alloc(layout) };
+
+        assert_eq!(ptr, ptr::null_mut());
+    }
+
+    #[test_case]
+    fn simple_alloc() {
+        let mut test_heap = test_utils::AlignedBuffer::new();
+        let heap_start = test_heap.start_addr();
+
+        let locked_allocator = Locked::new(LinkedListAllocator::new());
+
+        {
+            locked_allocator.lock().init(heap_start, 4096);
+        }
+
+        let layout = Layout::new::<usize>();
+        let ptr = unsafe { locked_allocator.alloc(layout) };
+
+        assert_eq!(ptr as usize, heap_start);
+    }
+
+    #[test_case]
+    fn alloc_till_full() {
+        let mut test_heap = test_utils::AlignedBuffer::new();
+        let heap_start = test_heap.start_addr();
+
+        let locked_allocator = Locked::new(LinkedListAllocator::new());
+
+        {
+            locked_allocator.lock().init(heap_start, 4096);
+        }
+
+        let layout = Layout::new::<test_utils::TwoKiB>();
+
+        let ptr_1 = unsafe { locked_allocator.alloc(layout) };
+        let ptr_2 = unsafe { locked_allocator.alloc(layout) };
+        let ptr_3 = unsafe { locked_allocator.alloc(layout) };
+
+        assert_eq!(ptr_1 as usize, heap_start);
+        assert_eq!(ptr_2 as usize, heap_start + 2048);
+        assert_eq!(ptr_3, ptr::null_mut(), "should run out of heap");
+    }
+
+    #[test_case]
+    fn dealloced_memory_is_allocable() {
+        let mut test_heap = test_utils::AlignedBuffer::new();
+        let heap_start = test_heap.start_addr();
+
+        let locked_allocator = Locked::new(LinkedListAllocator::new());
+
+        {
+            locked_allocator.lock().init(heap_start, 4096);
+        }
+
+        let two_kib_layout = Layout::new::<test_utils::TwoKiB>();
+
+        // Alloc 2 2KiB chunks
+        let ptr_1 = unsafe { locked_allocator.alloc(two_kib_layout) };
+        let ptr_2 = unsafe { locked_allocator.alloc(two_kib_layout) };
+        unsafe { locked_allocator.dealloc(ptr_1, two_kib_layout) };
+        unsafe { locked_allocator.dealloc(ptr_2, two_kib_layout) };
+
+        let one_kib_layout = Layout::new::<test_utils::OneKiB>();
+
+        // Reuse the 2 2KiB chunks as 4 1KiB chunks
+        let ptr_3 = unsafe { locked_allocator.alloc(one_kib_layout) };
+        let ptr_4 = unsafe { locked_allocator.alloc(one_kib_layout) };
+        let ptr_5 = unsafe { locked_allocator.alloc(one_kib_layout) };
+        let ptr_6 = unsafe { locked_allocator.alloc(one_kib_layout) };
+
+        assert_eq!(ptr_3 as usize, heap_start + 2048);
+        assert_eq!(ptr_4 as usize, heap_start + 3072);
+        assert_eq!(ptr_5 as usize, heap_start);
+        assert_eq!(ptr_6 as usize, heap_start + 1024);
+    }
+}
+
+#[cfg(test)]
+mod test_utils {
+    use super::*;
+    use crate::allocator::align_up;
+
+    #[repr(align(16))]
+    pub struct AlignedBuffer([u8; 4096]);
+
+    impl AlignedBuffer {
+        pub fn new() -> Self {
+            AlignedBuffer([0; 4096])
+        }
+
+        pub fn start_addr(&mut self) -> usize {
+            self.0.as_mut_ptr() as usize
+        }
+    }
+
+    #[allow(dead_code)]
+    pub struct OneKiB([u8; 1024]);
+    #[allow(dead_code)]
+    pub struct TwoKiB([u8; 2048]);
+
+    /// Creates a LinkedListAllocator with 5 blocks, whose starting addresses and sizes are as
+    /// specified in the arrays.
+    pub fn new_ll_allocator_with_five_blocks(
+        addrs: [usize; 5],
+        sizes: [usize; 5],
+    ) -> LinkedListAllocator {
+        let mut ll_allocator = LinkedListAllocator::new();
+        for (&addr, size) in addrs.iter().zip(sizes) {
+            let aligned_addr = align_up(addr, mem::align_of::<ListNode>());
+            unsafe {
+                ll_allocator.add_free_region(aligned_addr, size);
+            }
+        }
+        ll_allocator
     }
 }
