@@ -52,9 +52,11 @@ impl ListNode {
     /// 1. the ListNode is too small for the requested size, or
     /// 2. the leftover size is too small to fit a new ListNode.
     fn try_allocate(&self, size: usize, align: usize) -> Result<UsableRegion, ()> {
-        // FIXME: if aligned up, leading gap will be lost, we ignore for now,
-        // but try to think of a solution
-        let alloc_start = super::align_up(self.start_addr(), align);
+        let alloc_start = self.start_addr();
+
+        // This assertion is already done by LinkedListAllocator.add_free_region()
+        assert_eq!(super::align_up(alloc_start, align), alloc_start);
+
         let alloc_end = alloc_start.checked_add(size).ok_or(())?;
 
         if alloc_end > self.end_addr() {
@@ -113,7 +115,11 @@ impl LinkedListAllocator {
         }
     }
 
-    pub fn init(&mut self, heap_start: usize, heap_size: usize) {
+    /// Adds an initial region for the heap.
+    ///
+    /// Unsafe because the caller must ensure heap_start is a valid address and the entire
+    /// region is available for allocation.
+    pub unsafe fn init(&mut self, heap_start: usize, heap_size: usize) {
         unsafe {
             self.add_free_region(heap_start, heap_size);
         }
@@ -190,6 +196,7 @@ unsafe impl GlobalAlloc for super::Locked<LinkedListAllocator> {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // TODO: check that ptr is within the original inited region
         unsafe {
             self.lock()
                 .add_free_region(ptr as usize, ListNode::alloc_size(layout));
@@ -393,7 +400,7 @@ mod linked_list_allocator {
             let mut test_heap = test_utils::AlignedBuffer::new();
 
             let mut ll_allocator = LinkedListAllocator::new();
-            ll_allocator.init(test_heap.start_addr(), 4096);
+            unsafe { ll_allocator.init(test_heap.start_addr(), 4096) };
 
             assert!(
                 ll_allocator
@@ -477,9 +484,7 @@ mod alloc_dealloc {
 
         let locked_allocator = Locked::new(LinkedListAllocator::new());
 
-        {
-            locked_allocator.lock().init(heap_start, 4096);
-        }
+        unsafe { locked_allocator.lock().init(heap_start, 4096) };
 
         let layout = Layout::new::<usize>();
         let ptr = unsafe { locked_allocator.alloc(layout) };
@@ -494,9 +499,7 @@ mod alloc_dealloc {
 
         let locked_allocator = Locked::new(LinkedListAllocator::new());
 
-        {
-            locked_allocator.lock().init(heap_start, 4096);
-        }
+        unsafe { locked_allocator.lock().init(heap_start, 4096) };
 
         let layout = Layout::new::<test_utils::TwoKiB>();
 
@@ -516,9 +519,7 @@ mod alloc_dealloc {
 
         let locked_allocator = Locked::new(LinkedListAllocator::new());
 
-        {
-            locked_allocator.lock().init(heap_start, 4096);
-        }
+        unsafe { locked_allocator.lock().init(heap_start, 4096) };
 
         let two_kib_layout = Layout::new::<test_utils::TwoKiB>();
 

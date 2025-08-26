@@ -63,11 +63,10 @@ fn many_boxes() {
 /// deallocated. The `long_lived` allocation prevents this.
 #[test_case]
 fn many_boxes_long_lived() {
-    // TODO: put this test case back when new allocator is done
-    // let long_lived = Box::new(1);
+    let long_lived = Box::new(1);
     for i in 0..(2 * HEAP_SIZE) {
         let x = Box::new(i);
         assert_eq!(*x, i);
     }
-    // assert_eq!(*long_lived, 1);
+    assert_eq!(*long_lived, 1);
 }
