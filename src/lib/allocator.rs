@@ -1,3 +1,4 @@
+use fixed_size_block::FixedSizeBlockAllocator;
 use spin::MutexGuard;
 use x86_64::{
     VirtAddr,
@@ -6,16 +7,15 @@ use x86_64::{
     },
 };
 
-use crate::allocator::linked_list::LinkedListAllocator;
-
 pub mod bump;
+pub mod fixed_size_block;
 pub mod linked_list;
 
 pub const HEAP_START: usize = 0x_4444_4444_0000;
 pub const HEAP_SIZE: usize = 100 * 1024; // 100 KiB
 
 #[global_allocator]
-static ALLOCATOR: Locked<LinkedListAllocator> = Locked::new(LinkedListAllocator::new());
+static ALLOCATOR: Locked<FixedSizeBlockAllocator> = Locked::new(FixedSizeBlockAllocator::new());
 
 pub fn init_heap(
     mapper: &mut impl Mapper<Size4KiB>,

@@ -108,6 +108,9 @@ pub struct LinkedListAllocator {
     head: ListNode,
 }
 
+/// A heap allocator that writes ListNodes into the heap, forming a Linked List.
+///
+/// TODO: Does not merge freed blocks for now.
 impl LinkedListAllocator {
     pub const fn new() -> Self {
         LinkedListAllocator {
@@ -115,10 +118,10 @@ impl LinkedListAllocator {
         }
     }
 
-    /// Adds an initial region for the heap.
+    /// Initialise the allocator with the given heap bounds.
     ///
-    /// Unsafe because the caller must ensure heap_start is a valid address and the entire
-    /// region is available for allocation.
+    /// Unsafe because the caller must guarantee the given heap bounds are valid and that the heap
+    /// is unused. This method can only be called once.
     pub unsafe fn init(&mut self, heap_start: usize, heap_size: usize) {
         unsafe {
             self.add_free_region(heap_start, heap_size);
